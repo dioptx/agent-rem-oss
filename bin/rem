@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# rem - nightly session-consolidation CLI. `rem <sub> [args]` -> python3 -m rem.<sub>
+# Resolves the repo from its own location so the checkout can live anywhere.
+self="${BASH_SOURCE[0]}"
+while [ -L "$self" ]; do
+  target=$(readlink "$self")
+  case "$target" in /*) self="$target" ;; *) self="$(dirname "$self")/$target" ;; esac
+done
+cd "$(cd "$(dirname "$self")/.." && pwd)" || exit 1
+sub="${1:-ledger}"; [ $# -gt 0 ] && shift
+if [ "$sub" = "root" ]; then
+  pwd
+  exit 0
+fi
+exec python3 -m "rem.$sub" "$@"

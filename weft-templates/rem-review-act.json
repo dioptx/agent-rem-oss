@@ -1,0 +1,50 @@
+{
+  "name": "rem-review-act",
+  "tagline": "Night briefing to logged decisions and real workflow edits",
+  "description": "Turn a night-consolidation briefing into logged decisions and real workflow edits, then a verdict page - the repeatable consolidate -> act -> close-the-loop flow. Run it whenever you want to actually work a briefing instead of letting patterns carry and climb.\n\nThe night agent surfaces friction/win patterns every morning but only records a verdict if you act on it; left alone, every pattern just carries and its Day-count climbs. This workflow closes that gap: surface the accumulated state as a triage menu, decide what to act on in a gated Plannotator review (human gate), implement each accepted action as a concrete edit, log the marks so the ledger records the decision, and write a verdict page of what changed.\n\nHuman-in-the-loop by design. The agent gathers and proposes; you choose what to accept/mute/drop/snooze/note. Load-bearing rule: every accept must be backed by a real edit - no empty verdicts, no theater in the ledger. It reads/writes the live consolidation DB and journals, and edits rules/config only where you approve, at the canonical source, never a generated rulebook.\n\nNot for: generating new insights (that is the nightly run) or autonomous fixes (a human picks and verifies every action).",
+  "tags": [
+    "rem",
+    "consolidation",
+    "meta",
+    "human-gated"
+  ],
+  "repo_scope": null,
+  "schema_version": 2,
+  "steps": [
+    {
+      "name": "surface",
+      "context": "inline",
+      "on_fail": "block",
+      "guards": [],
+      "description": "Resolve the Agent REM checkout with `rem root`. Run `rem ledger` and `rem actions --preview` and read both (including each insight's Where pointer and evidence quotes). If there is no latest journal, or nothing is carrying and nothing surfaced, report 'consolidation clear - nothing to act on' and STOP the workflow (abort). Otherwise, before recommending anything, VERIFY each surfaced pattern against the store: pull its in-window events from data/events.db by pattern_id, classify what each event actually is, and count how many of them each proposal would have prevented. The briefing's quotes are a sample and mislead in both directions (a noisy quote can sit inside a session with a real failure). A proposal that would have prevented none of the window's events is not a recommendation: steer that pattern to drop, note or snooze and give the count. Then write the triage menu as markdown, no HTML step, at ~/.local/share/consolidation/triage-<journal-date>.md (the latest journal's date) - numbers first: a stat line (runs, surfaced today, oldest Day-N, decisions logged all-time - call the last one out hard if 0), then one section per surfaced pattern with its days unresolved and its layered options as PLAIN tier words (tiny -> medium -> systemic), never coded ids like P1.T2. Label valence in plain words: 'friction' (a recurring cost worth cutting) and 'win' (a habit worth keeping), not the raw drag/lift terms. End each pattern's section with a 'What I would do' line: the single option you would take, or note/snooze/defer, with one line why that carries the verified fit count (e.g. '3 of 4 sessions show the same miss') - a recommendation not a survey. No paste-back line: the human rules each pattern by annotating its section at the triage gate. The recommendation is ADVISORY: do NOT decide or edit anything here - the human still rules every pattern at the triage gate. Write the menu path, the surfaced pattern ids + their proposal ids + your recommended pick per pattern into the workflow context for the next steps."
+    },
+    {
+      "name": "triage",
+      "context": "inline",
+      "on_fail": "block",
+      "guards": [],
+      "description": "HUMAN GATE. Open the triage menu from surface in a gated Plannotator review: the `plannotator` tool with gate: true when present, else `plannotator annotate <menu> --gate --json` (mechanics in the plannotator skill). The human rules each surfaced pattern by annotating its section: accept (the recommended pick or a named tier), mute (silence the signature for good), drop (dismiss this instance), snooze Nd, or note (comment, keep open); a pattern left unannotated carries. Only \"decision\": \"approved\" ends this step; map each accept to its T-proposal id(s) from the workflow context. \"annotated\" without an approval means revise the menu per the comments and reopen the gate; \"dismissed\" (a closed tab) means block with nothing touched. For every accept, write down the concrete edit it implies - file + one-line change - so the implement step is unambiguous; if an accept has no concrete edit, mark it in the menu as steered to note or snooze and reopen the gate rather than guessing. Record verdict-per-pattern-id in the workflow context. Do not touch any file yet."
+    },
+    {
+      "name": "implement",
+      "context": "inline",
+      "on_fail": "block",
+      "guards": [],
+      "description": "For EACH accepted proposal from triage, make the concrete edit the action names - the real workflow improvement: a rule in your instruction files, an agent-specific settings change, a skill or weft template, or a hook. Edit CANONICAL sources, never a generated CLAUDE.md or AGENTS.md. One edit per accept, and every accept must land a real change. If an accepted action proves not implementable as a concrete edit, kick it back: downgrade that pattern's verdict to note or snooze in the workflow context rather than logging an empty accept. Run any repo tests you touched (e.g. `python3 -m pytest tests/ -q` in agent-rem) and confirm green. Commit each edit with a trailer line `Rem-Fixes: <pattern id>` (several ids comma-separated); REM links that commit to the pattern on its next night (rem.link, run by rem.feedback). For an edit that never gets committed, run `python3 -m rem.actions --link <pattern id> <url or path>` instead. Summarize each edit as pattern -> file -> one-line change."
+    },
+    {
+      "name": "mark",
+      "context": "inline",
+      "on_fail": "retry",
+      "guards": [],
+      "description": "Edit the latest journal markdown (~/.local/share/consolidation/journal-<date>.md) to match the triage verdicts: flip accepted proposal boxes `- [ ]` -> `- [x]`, and set each item's `note:` line per the grammar (mute / drop / snooze Nd / free-text comment). Only mark accepts whose edit actually landed in the implement step. Run `python3 -m rem.review` and READ its per-item echo to confirm the parse matches the intended verdicts (a typo silently becomes a carry). Then run `python3 -m rem.ledger` and confirm 'Decisions logged' rose by the number of verdicts and the acted patterns left the carrying list. If the echo mismatches, fix the markdown and re-run - review is idempotent (it clears and re-applies)."
+    },
+    {
+      "name": "verdict-page",
+      "context": "inline",
+      "on_fail": "continue",
+      "guards": [],
+      "description": "Build a verdict page of what THIS run changed with the available verdict-page skill or scaffold. Verdict-first: headline = the outcome (e.g. 'N decisions logged, M patterns resolved'); stat strip with the load-bearing numbers (decisions before->after, accepts, edits shipped, tests); a What-changed before->after list; and the accepted actions each with the file it touched. Run the skill's checker when available. Write the HTML under ~/.local/share/consolidation/, report the path, and open it with a plain `plannotator annotate <page>` (the `plannotator` tool when present; no gate, nothing waits on it). Keep it to one screen, plain and numeric, no cheerleading. Best-effort: if the page fails to build, report the outcome as text and finish the workflow."
+    }
+  ]
+}
